@@ -76,14 +76,14 @@ function read(req, res) {
 
 function dishIdMatches(req, res, next) {
     const { dishId } = req.params;
-    const { id } = res.locals.dish;
+    const { id } = req.body.data;
 
-    if (id === dishId){
+    if (!id || id === dishId){
         return next();
     }
 
     next({
-        status: 404,
+        status: 400,
         message: `Dish id does not match route id. Dish: ${id}, Route: ${dishId}`
     });
 }
@@ -115,13 +115,13 @@ module.exports = {
         create],
     read: [dishExists, read],
     update: [
+        dishExists,
         bodyDataHas("name"),
         bodyDataHas("description"),
         bodyDataHas("price"),
         bodyDataHas("image_url"),
         priceIsValidNumber, 
         dishIdMatches,
-        dishExists,
         update
     ],
     list,

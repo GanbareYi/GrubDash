@@ -26,20 +26,20 @@ function bodyDataHas(propertyName){
 function hasOneOrMoreDish(req, res, next) {
     const { data: { dishes } = {}} = req.body;
 
-    if (Array.isArray(dishes) && dishes.length() >= 1){
-        return next();
+    if (!Array.isArray(dishes) || dishes.length === 0){
+        return next({
+            status: 400,
+            message: "Order must include at least one dish."
+        });
     } 
 
-    next({
-        status: 400,
-        message: "Order must include at least one dish."
-    })
+    next();
 }
 
 function quantityIsValidNumber(req, res, next) {
     const { data: { dishes } = {} } = req.body;
 
-    dishes.forEach(dish => {
+    dishes.forEach((dish, index) => {
         const quantity = dish.quantity;
         if (!quantity || quantity <=0 || !Number.isInteger(quantity)){
             return next({
@@ -56,7 +56,7 @@ function create(req, res) {
     const { data: { deliverTo, mobileNumber, status, dishes } = {} } = req.body;
 
     const newOrder = {
-        id: nextId,
+        id: nextId(),
         deliverTo: deliverTo,
         mobileNumber: mobileNumber,
         status: status,
@@ -70,7 +70,7 @@ function create(req, res) {
 function orderExists(req, res, next) {
     const { orderId } = req.params;
 
-    const foundOrder = orders.find(order => order.id === Number(orderId));
+    const foundOrder = orders.find(order => order.id === orderId);
     if (foundOrder) {
         res.locals.order = foundOrder;
         return next();
@@ -88,14 +88,14 @@ function read(req, res) {
 
 function orderIdMatches(req, res, next) {
     const { orderId } = req.params;
-    const { id } = res.locals.order;
+    const { id } = req.body.data;
 
-    if (id === Number(orderId)) {
+    if (!id || id === orderId) {
         return next();
     }
 
     next({
-        status: 404,
+        status: 400,
         message: `Order id does not match route id. Order: ${id}, Route: ${orderId}.`
     })
 }
@@ -104,13 +104,6 @@ function statusPropertyIsValid(req, res, next) {
     const { data: { status } = {} } = req.body;
     const currentStatus = res.locals.order.status;
 
-    if (req.method === "destroy" && currentStatus !== "pending") {
-        return next({
-            status: 400, 
-            message: "An order cannot be deleted unless it is pending."
-        })
-    }
-
     if (currentStatus === "delivered") {
         return next({
             status: 404,
@@ -118,9 +111,9 @@ function statusPropertyIsValid(req, res, next) {
         })
     }
 
-    if (!status) {
+    if (!status || status === "invalid") {
         return next({
-            status: 404,
+            status: 400,
             message: "Order must have a status of pending, preparing, out-for-delivery, delivered"
         })
     }
@@ -140,10 +133,23 @@ function update(req, res) {
     res.json({ data: order});
 }
 
+function statusIsPending(req, res, next) {
+    const { status } = res.locals.order;
+    
+    if (status !== "pending") {
+        return next({
+            status: 400, 
+            message: "An order cannot be deleted unless it is pending."
+        });
+    }
+    
+    next();
+}
+
 function destroy(req, res, next) {
     const { orderId } = req.params;
 
-    const index = orders.findIndex(order => order.id === Number(orderId));
+    const index = orders.findIndex(order => order.id === orderId);
     orders.splice(index, 1);
     res.sendStatus(204);
 }
@@ -166,6 +172,7 @@ module.exports = {
         read
     ],
     update: [
+        orderExists,
         bodyDataHas("deliverTo"),
         bodyDataHas("mobileNumber"),
         bodyDataHas("dishes"),
@@ -177,7 +184,7 @@ module.exports = {
     ],
     delete: [
         orderExists,
-        statusPropertyIsValid,
+        statusIsPending,
         destroy
     ],
     list,
